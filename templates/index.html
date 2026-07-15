@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>flexible-llm</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e1e4e8; }
+.app { display: flex; height: 100vh; }
+.sidebar { width: 280px; background: #161b22; border-right: 1px solid #21262d; padding: 16px; overflow-y: auto; }
+.sidebar h2 { font-size: 14px; text-transform: uppercase; color: #8b949e; margin-bottom: 12px; }
+.mem-item { padding: 8px 12px; margin-bottom: 4px; border-radius: 6px; cursor: pointer; font-size: 14px; color: #c9d1d9; }
+.mem-item:hover { background: #21262d; }
+.mem-item.active { background: #1f6feb; color: white; }
+.main { flex: 1; display: flex; flex-direction: column; }
+.header { padding: 16px 24px; border-bottom: 1px solid #21262d; display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 20px; }
+.btn { padding: 6px 16px; border-radius: 6px; border: 1px solid #30363d; background: #21262d; color: #c9d1d9; cursor: pointer; font-size: 13px; }
+.btn:hover { background: #30363d; }
+.btn-primary { background: #1f6feb; border-color: #1f6feb; color: white; }
+.btn-primary:hover { background: #388bfd; }
+.content { flex: 1; padding: 24px; overflow-y: auto; }
+.view { display: none; }
+.view.active { display: block; }
+.card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+.card h3 { font-size: 16px; margin-bottom: 8px; }
+.card p { color: #8b949e; font-size: 13px; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; color: #8b949e; margin-bottom: 6px; }
+.form-group input, .form-group textarea, .form-group select {
+  width: 100%; padding: 8px 12px; background: #0d1117; border: 1px solid #30363d;
+  border-radius: 6px; color: #e1e4e8; font-size: 14px;
+}
+.form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+  outline: none; border-color: #1f6feb;
+}
+textarea { resize: vertical; min-height: 100px; }
+.chat-messages { min-height: 300px; max-height: 50vh; overflow-y: auto; padding: 16px; background: #0d1117; border-radius: 8px; margin-bottom: 12px; }
+.msg { margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.5; }
+.msg-user { background: #1f6feb22; border-left: 3px solid #1f6feb; }
+.msg-assistant { background: #161b2222; border-left: 3px solid #238636; }
+.msg-system { background: #3d2e0022; border-left: 3px solid #d29922; }
+.chat-input-area { display: flex; gap: 8px; }
+.chat-input-area textarea { flex: 1; padding: 8px 12px; }
+.status { font-size: 12px; color: #8b949e; }
+.tag { display: inline-block; padding: 2px 8px; background: #30363d; border-radius: 12px; font-size: 11px; margin-right: 4px; }
+.file-list { list-style: none; padding: 0; }
+.file-list li { padding: 6px 0; font-size: 13px; color: #8b949e; }
+.file-list li::before { content: '📄 '; }
+.spinner { display: inline-block; animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.provider-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+.provider-anthropic { background: #d2992233; color: #d29922; }
+.provider-openai { background: #23863633; color: #3fb950; }
+.provider-local { background: #8b949e33; color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h2 style="margin:0">Memories</h2>
+      <button class="btn btn-primary" onclick="showView('create-memory')">+</button>
+    </div>
+    <div id="memory-list"></div>
+    <hr style="border-color:#21262d;margin:16px 0">
+    <h2>Navigation</h2>
+    <div class="mem-item active" id="nav-home" onclick="showView('home')">🏠 Home</div>
+    <div class="mem-item" id="nav-chat" onclick="showView('chat')">💬 Chat</div>
+    <div class="mem-item" id="nav-config" onclick="showView('config')">⚙️ Config</div>
+  </div>
+
+  <!-- Main area -->
+  <div class="main">
+    <div class="header">
+      <h1 id="page-title">Home</h1>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="status" id="provider-status"></span>
+        <button class="btn" onclick="loadData()">Refresh</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- Home view -->
+      <div class="view active" id="view-home">
+        <h3 style="margin-bottom:12px">Welcome to flexible-llm</h3>
+        <p style="color:#8b949e;margin-bottom:16px">Manage your knowledge contexts and chat with any LLM.</p>
+        <div class="card">
+          <h3>📁 Your memories</h3>
+          <p>Create memory directories to store knowledge contexts for your LLMs.</p>
+          <div id="home-memory-count" style="margin-top:8px;font-size:24px;font-weight:bold;color:#1f6feb"></div>
+        </div>
+        <div class="card">
+          <h3>🤖 LLM Providers</h3>
+          <p>Anthropic, OpenAI, and Local LLMs supported.</p>
+          <div id="home-providers" style="margin-top:8px"></div>
+        </div>
+        <div class="card">
+          <h3>🚀 Quick Start</h3>
+          <p style="line-height:2">
+            1. Create a memory directory<br>
+            2. Add context files (MD, TXT, JSON)<br>
+            3. Choose an LLM provider<br>
+            4. Chat with your knowledge
+          </p>
+        </div>
+      </div>
+
+      <!-- Create memory view -->
+      <div class="view" id="view-create-memory">
+        <div class="card">
+          <h3>Create New Memory</h3>
+          <div class="form-group">
+            <label>Name (required, unique)</label>
+            <input type="text" id="new-memory-name" placeholder="e.g. project-alpha">
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="new-memory-desc" placeholder="What is this memory about?"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Tags</label>
+            <input type="text" id="new-memory-tags" placeholder="e.g. work, project, personal">
+          </div>
+          <button class="btn btn-primary" onclick="createMemory()">Create Memory</button>
+        </div>
+      </div>
+
+      <!-- Chat view -->
+      <div class="view" id="view-chat">
+        <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center">
+          <select id="chat-memory-select">
+            <option value="__global__">Global (no memory)</option>
+          </select>
+          <select id="chat-provider-select">
+            <option value="">Use default</option>
+          </select>
+        </div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="chat-input-area">
+          <textarea id="chat-input" placeholder="Type your message..." rows="3"></textarea>
+          <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+        </div>
+      </div>
+
+      <!-- Config view -->
+      <div class="view" id="view-config">
+        <div class="card">
+          <h3>API Keys</h3>
+          <p style="margin-bottom:12px">These keys are stored in config.json (gitignored) or your .env file.</p>
+          <div class="form-group">
+            <label>ANTHROPIC_API_KEY</label>
+            <input type="text" id="key-anthropic" placeholder="sk-ant-...">
+          </div>
+          <div class="form-group">
+            <label>OPENAI_API_KEY</label>
+            <input type="text" id="key-openai" placeholder="sk-...">
+          </div>
+          <button class="btn btn-primary" onclick="saveConfigKeys()">Save Keys</button>
+        </div>
+        <div class="card">
+          <h3>Default LLM</h3>
+          <div class="form-group">
+            <label>Provider</label>
+            <select id="config-provider">
+              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="openai">OpenAI</option>
+              <option value="local">Local (Ollama, LM Studio)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Model</label>
+            <input type="text" id="config-model" placeholder="claude-3.5-sonnet-20241022">
+          </div>
+          <button class="btn btn-primary" onclick="saveDefaultLLM()">Save Default</button>
+        </div>
+        <div class="card">
+          <h3>Local LLM Settings</h3>
+          <div class="form-group">
+            <label>Base URL</label>
+            <input type="text" id="config-local-url" placeholder="http://localhost:11434/v1">
+          </div>
+          <div class="form-group">
+            <label>Default Model</label>
+            <input type="text" id="config-local-model" placeholder="llama3.3">
+          </div>
+          <button class="btn btn-primary" onclick="saveLocalLLM()">Save Local LLM</button>
+        </div>
+        <div class="card">
+          <h3>Memory Root Directory</h3>
+          <p id="config-dir-path" style="color:#c9d1d9"></p>
+        </div>
+      </div>
+
+      <!-- Memory detail view -->
+      <div class="view" id="view-memory-detail">
+        <div style="margin-bottom:16px">
+          <button class="btn" onclick="showView('home')">← Back</button>
+        </div>
+        <div class="card">
+          <h3 id="detail-name"></h3>
+          <p id="detail-desc"></p>
+          <div id="detail-tags" style="margin-top:8px"></div>
+          <div style="margin-top:8px;font-size:12px;color:#8b949e">
+            <div id="detail-times"></div>
+            <div id="detail-file-count"></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Context Files</h3>
+          <ul class="file-list" id="detail-files"></ul>
+        </div>
+        <div class="card">
+          <h3>Set Default LLM for This Memory</h3>
+          <div class="form-group">
+            <select id="detail-provider">
+              <option value="anthropic">Anthropic</option>
+              <option value="openai">OpenAI</option>
+              <option value="local">Local</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <input type="text" id="detail-model" placeholder="model name">
+          </div>
+          <button class="btn btn-primary" onclick="setMemoryLLM()">Save</button>
+          <button class="btn" style="margin-left:8px" onclick="deleteCurrentMemory()">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentMemory = null;
+let memories = [];
+let currentView = 'home';
+let chatHistory = [];
+
+function showView(name) {
+  currentView = name;
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  const view = document.getElementById('view-' + name);
+  if (view) view.classList.add('active');
+
+  const navs = document.querySelectorAll('#nav-home,#nav-chat,#nav-config');
+  navs.forEach(n => n.classList.remove('active'));
+  const navMap = {'home':'nav-home','create-memory':'nav-home','chat':'nav-chat','config':'nav-config'};
+  if (navMap[name]) document.getElementById(navMap[name]).classList.add('active');
+
+  const titles = {home:'Home','create-memory':'Create Memory','chat':'Chat','config':'Config','memory-detail':'Memory Details'};
+  document.getElementById('page-title').textContent = titles[name] || 'Home';
+}
+
+async function loadData() {
+  try {
+    const [res1, res2] = await Promise.all([
+      fetch('/api/memories'),
+      fetch('/api/providers')
+    ]);
+    memories = await res1.json();
+    const providers = await res2.json();
+
+    renderMemoryList();
+    renderProviders(providers);
+    populateChatsSelect();
+    updateProviderStatus(providers);
+    configProviders(providers);
+  } catch (e) {
+    console.error('Load error:', e);
+  }
+}
+
+function renderMemoryList() {
+  const el = document.getElementById('memory-list');
+  if (!memories.length) {
+    el.innerHTML = '<p style="color:#8b949e;font-size:12px">No memories yet</p>';
+    return;
+  }
+  el.innerHTML = memories.map(m =>
+    `<div class="mem-item ${currentMemory===m.name?'active':''}" onclick="openMemory('${m.name}')">${m.name}</div>`
+  ).join('');
+  document.getElementById('home-memory-count').textContent = memories.length + ' memory(s)';
+}
+
+function renderProviders(providers) {
+  const el = document.getElementById('home-providers');
+  el.innerHTML = providers.map(p =>
+    `<span class="provider-badge provider-${p.name}">${p.name} ${p.available?'✅':'❌'}</span> `
+  ).join('') || 'No providers loaded';
+}
+
+function updateProviderStatus(providers) {
+  const el = document.getElementById('provider-status');
+  const active = providers.find(p => p.available);
+  el.textContent = active ? ('Active: ' + active.name) : 'Check your config';
+}
+
+function configProviders(providers) {
+  const sel = document.getElementById('chat-provider-select');
+  sel.innerHTML = '<option value="">Use default</option>' +
+    providers.map(p => `<option value="${p.name}">${p.name} ${p.available?'':'(offline)'}</option>`).join('');
+}
+
+function populateChatsSelect() {
+  const sel = document.getElementById('chat-memory-select');
+  sel.innerHTML = '<option value="__global__">Global (no memory)</option>' +
+    memories.map(m => `<option value="${m.name}">${m.name}</option>`).join('');
+}
+
+async function createMemory() {
+  const name = document.getElementById('new-memory-name').value.trim();
+  if (!name) return alert('Name required');
+  const desc = document.getElementById('new-memory-desc').value;
+  const tags = document.getElementById('new-memory-tags').value.split(',').map(t=>t.trim()).filter(Boolean);
+  try {
+    await fetch('/api/memories', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({name, description: desc, tags})
+    });
+    document.getElementById('new-memory-name').value = '';
+    document.getElementById('new-memory-desc').value = '';
+    document.getElementById('new-memory-tags').value = '';
+    showView('home');
+    loadData();
+  } catch (e) { alert('Error: ' + e.message); }
+}
+
+async function openMemory(name) {
+  currentMemory = name;
+  renderMemoryList();
+  try {
+    const res = await fetch('/api/memories/' + name);
+    const mem = await res.json();
+    document.getElementById('detail-name').textContent = mem.name;
+    document.getElementById('detail-desc').textContent = mem.description || '';
+    document.getElementById('detail-tags').innerHTML = (mem.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('');
+    document.getElementById('detail-times').textContent = `Created: ${mem.created_at || ''} | Updated: ${mem.updated_at || ''}`;
+    document.getElementById('detail-file-count').textContent = `Files: ${mem.files ? mem.files.length : 0} in context`;
+    document.getElementById('detail-files').innerHTML = (mem.files||[]).map(f=>`<li>${f}</li>`).join('') || '<li>No files yet</li>';
+  } catch(e) { console.error(e); }
+  showView('memory-detail');
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  const memorySelect = document.getElementById('chat-memory-select');
+  const memory = memorySelect.value === '__global__' ? '__global__' : memorySelect.value;
+  const provider = document.getElementById('chat-provider-select').value;
+
+  chatHistory.push({role: 'user', content: text});
+
+  const msgsEl = document.getElementById('chat-messages');
+  msgsEl.innerHTML += '<div class="msg msg-user">' + escapeHtml(text) + '</div>';
+
+  try {
+    const res = await fetch('/api/query', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({memory, prompt: text, provider})
+    });
+    const data = await res.json();
+    const reply = data.response || data;
+    chatHistory.push({role: 'assistant', content: reply});
+    msgsEl.innerHTML += '<div class="msg msg-assistant">' + escapeHtml(reply) + '</div>';
+  } catch(e) {
+    msgsEl.innerHTML += '<div class="msg msg-system">Error: ' + escapeHtml(e.message) + '</div>';
+  }
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+}
+
+async function saveConfigKeys() {
+  const anthropic = document.getElementById('key-anthropic').value;
+  const openai = document.getElementById('key-openai').value;
+  try {
+    await fetch('/api/config/keys', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({anthropic, openai})
+    });
+    alert('API keys saved');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function saveDefaultLLM() {
+  const provider = document.getElementById('config-provider').value;
+  const model = document.getElementById('config-model').value;
+  try {
+    await fetch('/api/config/llm', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({provider, model})
+    });
+    alert('Default LLM saved');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function saveLocalLLM() {
+  const url = document.getElementById('config-local-url').value;
+  const model = document.getElementById('config-local-model').value;
+  try {
+    await fetch('/api/config/local', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({base_url: url, model})
+    });
+    alert('Local LLM settings saved');
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function setMemoryLLM() {
+  try {
+    await fetch('/api/memories/' + currentMemory + '/llm', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        provider: document.getElementById('detail-provider').value,
+        model: document.getElementById('detail-model').value
+      })
+    });
+    alert('LLM setting saved for ' + currentMemory);
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function deleteCurrentMemory() {
+  if (!confirm('Delete ' + currentMemory + '?')) return;
+  try {
+    await fetch('/api/memories/' + currentMemory, {method: 'DELETE'});
+    currentMemory = null;
+    showView('home');
+    loadData();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function initConfig() {
+  try {
+    const res = await fetch('/api/config');
+    const cfg = await res.json();
+    if (cfg.api_keys) {
+      if (cfg.api_keys.ANTHROPIC_API_KEY) document.getElementById('key-anthropic').value = cfg.api_keys.ANTHROPIC_API_KEY;
+      if (cfg.api_keys.OPENAI_API_KEY) document.getElementById('key-openai').value = cfg.api_keys.OPENAI_API_KEY;
+    }
+    if (cfg.default_llm) {
+      document.getElementById('config-provider').value = cfg.default_llm.provider || 'anthropic';
+      document.getElementById('config-model').value = cfg.default_llm.model || '';
+    }
+    if (cfg.local_llm) {
+      document.getElementById('config-local-url').value = cfg.local_llm.base_url || '';
+      document.getElementById('config-local-model').value = cfg.local_llm.model || '';
+    }
+    document.getElementById('config-dir-path').textContent = cfg.config_dir || '';
+  } catch (e) { console.error('Init config:', e); }
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+document.getElementById('chat-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+loadData();
+initConfig();
+</script>
+</body>
+</html>

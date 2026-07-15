@@ -1,0 +1,32 @@
+# Secrets
+.env
+.env.*
+
+# Config (contains API keys)
+config.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.eggs/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Memory sessions (generated, not essential)
+memories/*/sessions/*.json

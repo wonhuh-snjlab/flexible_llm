@@ -1,0 +1,21 @@
+{
+  "name": "flexible-llm",
+  "version": "0.1.0",
+  "description": "Memory/context directory system with pluggable LLM providers",
+  "python": ">=3.10",
+  "entry_points": {
+    "console_scripts": [
+      "flexible-llm=app.cli:cli"
+    ]
+  },
+  "install_requires": [
+    "click>=8.1.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "jinja2>=3.1.0",
+    "python-dotenv>=1.0.0",
+    "anthropic>=0.18.0",
+    "openai>=1.10.0",
+    "httpx>=0.25.0"
+  ]
+}
